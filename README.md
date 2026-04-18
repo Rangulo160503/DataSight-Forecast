@@ -1,161 +1,142 @@
-# Proyecto_ML
+# DataSight Forecast
 
-Aplicación full-stack de Machine Learning para series temporales de delitos (OIJ):
-pipeline clásico en Python, API REST en Flask y SPA en React + TypeScript.
+Data analysis and forecasting system built with a modern, decoupled architecture.
 
-## Stack
+* Backend API in Python (Flask)
+* Frontend in React + TypeScript
+* Integrated Machine Learning pipeline
 
-- **Backend:** Python 3.12, Flask, SQLite, pandas, scikit-learn, statsmodels, XGBoost, Plotly.
-- **Frontend:** React 18 + TypeScript + Vite.
-- **Persistencia:** SQLite (`data.db`, tablas `delitos` y `runs`).
-- **DevOps:** Dockerfile + `docker-compose.yml`, GitHub Actions (lint + tests).
+---
 
-## Estructura
+## Architecture
 
-```
-Proyecto_ML/
-├── backend/                      # API + pipeline + modelos + servicios + persistencia
-│   ├── pipeline/
-│   │   └── ml_pipeline.py        # Entrenamiento ML (SARIMA, Holt-Winters, MLP, XGBoost)
-│   ├── models/
-│   │   └── run_history.py        # Tabla runs en data.db
-│   ├── services/
-│   │   ├── run_management_service.py  # Runs: list/create/rename/delete/clear
-│   │   └── pipeline_execution.py      # Subprocess ML + fusión CSV para la API
-│   ├── api/
-│   │   └── run_routes.py         # Blueprint /api/v1/runs
-│   ├── infrastructure/
-│   │   └── db.py                 # Acceso SQLite compartido (conexión + tabla delitos)
-│   └── main.py                   # Entrypoint Flask (API JSON)
-├── frontend/                     # SPA React + TypeScript + Vite
-├── tests/                        # Pytest (unit + smoke API)
-├── Dockerfile, docker-compose.yml
-├── .github/workflows/ci.yml      # CI mínima
-├── data/                         # CSV originales (destino de uploads)
-└── artifacts/                    # Resultados por ejecución
+```text
+backend/    → REST API + business logic + ML pipeline  
+frontend/   → user interface (React)  
+tests/      → automated tests  
 ```
 
-## Cómo correr
+The system follows an API-first architecture, where the frontend consumes REST endpoints (`/api/v1/...`).
 
-### Backend (Flask)
+---
+
+## Features
+
+* Execute Machine Learning pipeline on datasets
+* Manage runs:
+
+  * Create
+  * List
+  * Rename
+  * Delete
+* Persistent storage using SQLite
+* Input validation and duplicate control
+* Versioned REST API (`/api/v1`)
+
+---
+
+## API
+
+### Runs
+
+```text
+GET    /api/v1/runs  
+POST   /api/v1/runs  
+POST   /api/v1/runs/register  
+PATCH  /api/v1/runs/{run_id}  
+DELETE /api/v1/runs/{run_id}  
+DELETE /api/v1/runs  
+```
+
+---
+
+## Tech Stack
+
+### Backend
+
+* Python
+* Flask
+* SQLite
+* Pandas
+* NumPy
+* Scikit-learn
+
+### Frontend
+
+* React
+* TypeScript
+* Vite
+
+### DevOps
+
+* Docker
+* GitHub Actions (CI)
+
+---
+
+## Getting Started
+
+### Backend
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env               # editar SECRET_KEY
-flask --app backend.main run           # http://127.0.0.1:5000
-```
-
-En Windows PowerShell:
-
-```powershell
-$env:SECRET_KEY = "dev-secret"
 flask --app backend.main run
 ```
 
-### Frontend (React + TS)
+---
+
+### Frontend
 
 ```bash
 cd frontend
 npm install
-npm run dev                        # http://localhost:5173 (proxy a Flask)
+npm run dev
 ```
 
-### Docker
-
-```bash
-docker compose up --build          # http://localhost:5000
-```
+---
 
 ### Tests
 
 ```bash
-pip install pytest
 pytest -q
 ```
 
-## API v1 (REST)
+---
 
-| Método | Ruta                      | Descripción                                  |
-|--------|---------------------------|----------------------------------------------|
-| GET    | `/api/v1/runs`            | Lista runs (más reciente primero).           |
-| POST   | `/api/v1/runs`            | Ejecuta pipeline (`merge_all` o `dataset`).  |
-| POST   | `/api/v1/runs/register`   | Registra un run ya presente en `artifacts/`. |
-| PATCH  | `/api/v1/runs/<run_id>`   | Renombra un run.                             |
-| DELETE | `/api/v1/runs/<run_id>`   | Elimina run + artefactos.                    |
-| DELETE | `/api/v1/runs`            | Limpia todo el historial.                    |
-| GET    | `/`                       | Metadatos JSON del servicio (`api`, `ok`).   |
+### Docker (optional)
 
-## Environment Variables
-
-Configuración por entorno. Copiar `.env.example` a `.env` y ajustar valores
-(`.env` está git-ignorado; `.env.example` es la referencia versionada).
-
-| Variable         | Default       | Descripción                                               |
-|------------------|---------------|-----------------------------------------------------------|
-| `SECRET_KEY`     | `dev-secret-change-me` | Firma de sesiones Flask (obligatorio en producción). |
-| `FLASK_ENV`      | `development` | Modo de ejecución (informativo; no activa debugger).      |
-| `FLASK_DEBUG`    | `0`           | `1` activa el modo debug del servidor de desarrollo (`flask run`). |
-| `FLASK_RUN_HOST` | `127.0.0.1`   | Host al que hace bind el servidor de desarrollo.          |
-| `FLASK_RUN_PORT` | `5000`        | Puerto del servidor.                                      |
-
-## Pipeline ML
-
-`backend/pipeline/ml_pipeline.py` acepta el origen como argumento (ejecutar siempre
-desde la raíz del repo para resolver `data/` y `artifacts/`):
-
-- `python -m backend.pipeline.ml_pipeline auto` — SQLite si hay datos; si no, todos los `data/*.csv`.
-- `python -m backend.pipeline.ml_pipeline db` — solo SQLite.
-- `python -m backend.pipeline.ml_pipeline csv <archivo.csv>` — un único CSV en `data/`.
-- `python -m backend.pipeline.ml_pipeline all_csv` — concatena todos los `data/*.csv`
-  (modo usado por `POST /api/v1/runs` con `merge_all: true`).
-
-Cada ejecución genera una carpeta `artifacts/<run_id>/` con:
-
-- `meta.json` (modelo ganador, resumen de la corrida).
-- `errores_modelos.csv` (WRMSE por modelo).
-- `forecast_3m.csv` (pronóstico multi-horizonte).
-- `data_limpia.parquet` (dataset saneado).
-- HTMLs Plotly (`forecast_band.html`, `correlation_heatmap.html`, etc.).
-
-Los duplicados por `row_hash` no se insertan en la tabla `delitos`.
-
-## Frontend (resumen)
-
-- `/api/v1/runs` → lista con fecha, dataset, modelo ganador y WRMSE.
-- Crear / renombrar / eliminar run sin recargar la página.
-- UI tema oscuro por defecto; estado vacío cuando no hay artefactos.
-
-## Arquitectura
-
-```mermaid
-flowchart TB
-    subgraph CLIENT["Cliente"]
-        FE["React SPA (Vite)"]
-    end
-
-    subgraph API["Flask"]
-        V1["Blueprint /api/v1/runs"]
-    end
-
-    subgraph SERVICES["backend.services"]
-        SVC["run_management_service"]
-        PEX["pipeline_execution"]
-    end
-
-    subgraph DATA["Persistencia"]
-        DB[("data.db\n(SQLite)")]
-        ART[("artifacts/<run_id>/")]
-    end
-
-    subgraph ML["Pipeline"]
-        ML1["backend/pipeline/ml_pipeline.py\n(SARIMA · HW · MLP · XGB)"]
-    end
-
-    FE --> V1
-    V1 --> SVC
-    SVC --> PEX
-    SVC --> DB
-    PEX --> ML1
-    ML1 --> ART
-    ML1 --> DB
+```bash
+docker compose up --build
 ```
+
+---
+
+## Testing
+
+The project includes tests focused on:
+
+* API endpoints (`/api/v1`)
+* Persistence layer (`run_history`)
+* HTTP validation and error handling
+
+---
+
+## Design Decisions
+
+* Removed all server-side UI (Jinja templates)
+* Strict separation between backend and frontend
+* Business logic encapsulated in `services/`
+* ML pipeline decoupled from Flask
+* API as the main contract of the system
+
+---
+
+## Project Status
+
+Ready for technical demonstrations, interviews, and further production evolution.
+
+---
+
+## Author
+
+Ronald Angulo
